@@ -1,0 +1,5 @@
+{
+  "name": "AI Image Generator Node Workflow",
+  "description": "A node-based visual workflow for generating images using Nano Banana Pro and Gemini 3.1 Pro.",
+  "requestFramePermissions": []
+}
