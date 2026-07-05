@@ -12,16 +12,19 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
 } from '@xyflow/react';
+import { duplicateNodes, includeDescendants, removeNodesAndDetachChildren } from './workflowTransforms';
 
 export type AppNodeData = any;
 export type AppNode = Node<AppNodeData>;
 
 export type AppState = {
+  currentProjectId: string | null;
   nodes: AppNode[];
   edges: Edge[];
   clipboard: AppNode[];
   past: { nodes: AppNode[], edges: Edge[] }[];
   future: { nodes: AppNode[], edges: Edge[] }[];
+  setCurrentProjectId: (projectId: string | null) => void;
   saveHistory: () => void;
   undo: () => void;
   redo: () => void;
@@ -43,11 +46,15 @@ export type AppState = {
 };
 
 export const useStore = create<AppState>((set, get) => ({
+  currentProjectId: null,
   nodes: [],
   edges: [],
   clipboard: [],
   past: [],
   future: [],
+  setCurrentProjectId: (currentProjectId: string | null) => {
+    set({ currentProjectId });
+  },
   saveHistory: () => {
     const { nodes, edges, past } = get();
     const newPast = [...past, { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) }].slice(-50);
@@ -80,8 +87,16 @@ export const useStore = create<AppState>((set, get) => ({
   onNodesChange: (changes: NodeChange<AppNode>[]) => {
     const isRemove = changes.some(c => c.type === 'remove');
     if (isRemove) get().saveHistory();
+    const removedIds = new Set(changes.filter(c => c.type === 'remove').map(c => c.id));
+    const remainingChanges = changes.filter(c => c.type !== 'remove');
+    const nodes = isRemove
+      ? removeNodesAndDetachChildren(get().nodes, removedIds) as AppNode[]
+      : get().nodes;
     set({
-      nodes: applyNodeChanges(changes, get().nodes),
+      nodes: applyNodeChanges(remainingChanges, nodes),
+      edges: isRemove
+        ? get().edges.filter((edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target))
+        : get().edges,
     });
   },
   onEdgesChange: (changes: EdgeChange[]) => {
@@ -110,7 +125,7 @@ export const useStore = create<AppState>((set, get) => ({
   deleteNode: (nodeId: string) => {
     get().saveHistory();
     set({
-      nodes: get().nodes.filter((n) => n.id !== nodeId),
+      nodes: removeNodesAndDetachChildren(get().nodes, new Set([nodeId])) as AppNode[],
       edges: get().edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
     });
   },
@@ -130,19 +145,18 @@ export const useStore = create<AppState>((set, get) => ({
   },
   copySelectedNodes: () => {
     const selected = get().nodes.filter(n => n.selected);
-    set({ clipboard: selected });
+    set({ clipboard: includeDescendants(get().nodes, selected) as AppNode[] });
   },
   pasteNodes: () => {
     const clipboard = get().clipboard;
     if (!clipboard.length) return;
     
     get().saveHistory();
-    const newNodes = clipboard.map(node => ({
-      ...node,
-      id: `${node.type}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      position: { x: node.position.x + 50, y: node.position.y + 50 },
-      selected: true,
-    }));
+    const newNodes = duplicateNodes(
+      get().nodes,
+      clipboard,
+      (node) => `${node.type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    ) as AppNode[];
     
     set({
       nodes: [...get().nodes.map(n => ({ ...n, selected: false })), ...newNodes]

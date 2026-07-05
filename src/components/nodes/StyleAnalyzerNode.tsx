@@ -1,7 +1,7 @@
 import { Handle, Position } from '@xyflow/react';
 import { useStore } from '../../store';
 import { Sparkles, Loader2, X } from 'lucide-react';
-import { analyzeStyle } from '../../services/ai';
+import { analyzeStyle, imageSourceToAiInput } from '../../services/ai';
 
 export function StyleAnalyzerNode({ id, data }: { id: string, data: any }) {
   const updateNodeData = useStore((state) => state.updateNodeData);
@@ -26,11 +26,8 @@ export function StyleAnalyzerNode({ id, data }: { id: string, data: any }) {
 
     updateNodeData(id, { isLoading: true, error: null });
     try {
-      // Extract base64 part
-      const base64Data = sourceNodeData.image.split(',')[1];
-      const mimeType = sourceNodeData.mimeType || 'image/jpeg';
-      
-      const stylePrompt = await analyzeStyle(base64Data, mimeType);
+      const image = await imageSourceToAiInput(sourceNodeData.image, sourceNodeData.mimeType);
+      const stylePrompt = await analyzeStyle(image.data, image.mimeType);
       updateNodeData(id, { stylePrompt, isLoading: false });
     } catch (error: any) {
       console.error(error);

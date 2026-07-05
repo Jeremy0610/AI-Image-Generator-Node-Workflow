@@ -1,7 +1,7 @@
 import { Handle, Position } from '@xyflow/react';
 import { useStore } from '../../store';
 import { Lightbulb, Loader2, X, Plus, Minus } from 'lucide-react';
-import { generateCreativePrompts } from '../../services/ai';
+import { generateCreativePrompts, getAiImageBase64Limit, imageSourceToAiInput } from '../../services/ai';
 
 const VIEW_TYPES = [
   { id: 'aerial', label: 'Aerial View (鸟瞰图)', color: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
@@ -28,21 +28,19 @@ export function CreativeMasterNode({ id, data, selected }: { id: string, data: a
     }
 
     const incomingEdges = getIncomingEdges(id);
-    const referenceImages: { data: string, mimeType: string }[] = [];
+    const imageSources: { source: string, mimeType: string }[] = [];
     
     for (let i = 0; i < imageCount; i++) {
       const edge = incomingEdges.find(e => e.targetHandle === `image-${i}`);
       if (edge) {
         const nodeData = getNodeData(edge.source);
         if (nodeData?.image) {
-          const base64Data = nodeData.image.split(',')[1];
-          const mimeType = nodeData.mimeType || 'image/jpeg';
-          referenceImages.push({ data: base64Data, mimeType });
+          imageSources.push({ source: nodeData.image, mimeType: nodeData.mimeType || 'image/jpeg' });
         }
       }
     }
 
-    if (referenceImages.length === 0) {
+    if (imageSources.length === 0) {
       alert("Please connect at least one image.");
       return;
     }
@@ -50,7 +48,11 @@ export function CreativeMasterNode({ id, data, selected }: { id: string, data: a
     updateNodeData(id, { isLoading: true, error: null });
 
     try {
-      const viewLabels = selectedViews.map((vid: string) => VIEW_TYPES.find(v => v.id === vid)?.label || vid);
+      const maxBase64Length = getAiImageBase64Limit(imageSources.length);
+      const referenceImages = await Promise.all(
+        imageSources.map(({ source, mimeType }) => imageSourceToAiInput(source, mimeType, maxBase64Length)),
+      );
+      const viewLabels = selectedViews.map((vid: string) => VIEW_TYPES.find(v => v.id === vid)?.label.split(' (')[0] || vid);
       const results = await generateCreativePrompts(referenceImages, viewLabels, promptCount);
       
       const newPrompts: any[] = [];

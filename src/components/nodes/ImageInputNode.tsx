@@ -2,21 +2,24 @@ import React, { useRef } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { useStore } from '../../store';
 import { Image as ImageIcon, Upload, X } from 'lucide-react';
+import { saveImageAsset } from '../../services/localProjectDb';
 
 export function ImageInputNode({ id, data }: { id: string, data: any }) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const deleteNode = useStore((state) => state.deleteNode);
+  const currentProjectId = useStore((state) => state.currentProjectId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        updateNodeData(id, { image: base64, mimeType: file.type });
-      };
-      reader.readAsDataURL(file);
+    if (file && currentProjectId) {
+      try {
+        const asset = await saveImageAsset(currentProjectId, file);
+        updateNodeData(id, { image: asset.url, imageAssetId: asset.assetId, mimeType: asset.mimeType });
+      } catch (error) {
+        console.error(error);
+        alert('Could not store the selected image locally.');
+      }
     }
   };
 
@@ -52,7 +55,7 @@ export function ImageInputNode({ id, data }: { id: string, data: any }) {
           type="file" 
           ref={fileInputRef} 
           className="hidden" 
-          accept="image/*" 
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
           onChange={handleFileChange} 
         />
         <Handle type="source" position={Position.Right} id="image" style={{ right: '-6px', top: '50%' }} className="w-3 h-3 bg-emerald-500" />

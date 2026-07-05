@@ -18,8 +18,13 @@ export function OutputNode({ id, data, selected }: { id: string, data: any, sele
       const imageEdge = incomingEdges.find(e => e.targetHandle === 'image');
       if (imageEdge) {
         const sourceData = getNodeData(imageEdge.source);
-        if (sourceData?.generatedImage && sourceData.generatedImage !== data.image) {
-          updateNodeData(id, { image: sourceData.generatedImage });
+        const nextImage = sourceData?.generatedImage || sourceData?.image;
+        if (nextImage && nextImage !== data.image) {
+          updateNodeData(id, {
+            image: nextImage,
+            imageAssetId: sourceData.generatedImageAssetId || sourceData.imageAssetId,
+            mimeType: sourceData.mimeType,
+          });
         }
       }
     }, 1000);
@@ -46,7 +51,7 @@ export function OutputNode({ id, data, selected }: { id: string, data: any, sele
         type: 'staticImage',
         position: { x: posX, y: posY },
         style: { width: 250, height: 200 },
-        data: { image: data.image }
+        data: { image: data.image, imageAssetId: data.imageAssetId, mimeType: data.mimeType }
       });
     }
   };

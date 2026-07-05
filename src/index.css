@@ -10,3 +10,9 @@
   outline: none !important;
   box-shadow: none !important;
 }
+
+.react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+}

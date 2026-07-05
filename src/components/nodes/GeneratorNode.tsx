@@ -1,13 +1,15 @@
 import { Handle, Position } from '@xyflow/react';
 import { useStore } from '../../store';
 import { Wand2, Loader2, X } from 'lucide-react';
-import { generateImage } from '../../services/ai';
+import { generateImage, getAiImageBase64Limit, imageSourceToAiInput } from '../../services/ai';
+import { saveImageAsset } from '../../services/localProjectDb';
 
 export function GeneratorNode({ id, data }: { id: string, data: any }) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const getNodeData = useStore((state) => state.getNodeData);
   const getIncomingEdges = useStore((state) => state.getIncomingEdges);
   const deleteNode = useStore((state) => state.deleteNode);
+  const currentProjectId = useStore((state) => state.currentProjectId);
 
   const imageCount = data.imageCount || 1;
 
@@ -34,20 +36,18 @@ export function GeneratorNode({ id, data }: { id: string, data: any }) {
     
     const stylePrompt = styleData?.stylePrompt || '';
     
-    const referenceImages: { data: string, mimeType: string }[] = [];
+    const imageSources: { source: string, mimeType: string }[] = [];
     for (let i = 0; i < imageCount; i++) {
       const edge = incomingEdges.find(e => e.targetHandle === `image-${i}`);
       if (edge) {
         const nodeData = getNodeData(edge.source);
         if (nodeData?.image) {
-          const base64Data = nodeData.image.split(',')[1];
-          const mimeType = nodeData.mimeType || 'image/jpeg';
-          referenceImages.push({ data: base64Data, mimeType });
+          imageSources.push({ source: nodeData.image, mimeType: nodeData.mimeType || 'image/jpeg' });
         }
       }
     }
 
-    if (!basePrompt && !stylePrompt && referenceImages.length === 0) {
+    if (!basePrompt && !stylePrompt && imageSources.length === 0) {
       alert("Please connect a text prompt, style, or image.");
       return;
     }
@@ -58,8 +58,18 @@ export function GeneratorNode({ id, data }: { id: string, data: any }) {
 
     updateNodeData(id, { isLoading: true, error: null });
     try {
+      const maxBase64Length = getAiImageBase64Limit(imageSources.length);
+      const referenceImages = await Promise.all(
+        imageSources.map(({ source, mimeType }) => imageSourceToAiInput(source, mimeType, maxBase64Length)),
+      );
       const imageUrl = await generateImage(finalPrompt, aspectRatio, resolution, referenceImages);
-      updateNodeData(id, { isLoading: false, generatedImage: imageUrl });
+      const asset = currentProjectId ? await saveImageAsset(currentProjectId, imageUrl) : null;
+      updateNodeData(id, {
+        isLoading: false,
+        generatedImage: asset?.url || imageUrl,
+        generatedImageAssetId: asset?.assetId,
+        mimeType: asset?.mimeType || 'image/png',
+      });
     } catch (error: any) {
       console.error(error);
       updateNodeData(id, { isLoading: false, error: error.message });
